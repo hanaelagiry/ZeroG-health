@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crew Health Monitor</title>
+<style>
+:root{
+  --bg:#E8ECEF;--panel:#F6F8F9;--ink:#16232F;--mute:#55667A;--line:#C4CED6;
+  --ok:#1E7A66;--warn:#9A6200;--crit:#BF3A2B;--acc:#2A5A86;
+  --deep:#2A5A86;--light:#6E9BC5;--rem:#1E7A66;--awake:#C97A16;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1A23;--panel:#16232E;--ink:#E6EDF2;--mute:#93A4B1;--line:#2A3B49;
+    --ok:#4CC3A6;--warn:#E3B341;--crit:#F0786A;--acc:#7FB0DD;
+    --deep:#5A9BD4;--light:#3B668C;--rem:#4CC3A6;--awake:#E3B341;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1A23;--panel:#16232E;--ink:#E6EDF2;--mute:#93A4B1;--line:#2A3B49;
+  --ok:#4CC3A6;--warn:#E3B341;--crit:#F0786A;--acc:#7FB0DD;
+  --deep:#5A9BD4;--light:#3B668C;--rem:#4CC3A6;--awake:#E3B341;
+  color-scheme:dark;
+}
+html{scroll-padding-top:calc(4rem + env(safe-area-inset-top,0px));scroll-behavior:smooth}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15.5px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;overflow-x:hidden;padding-bottom:5rem}
+a{color:var(--acc)}
+.wrap{max-width:1060px;margin:0 auto;padding:0 1.25rem}
+
+/* Hologram Grid Mode */
+body.hud-mode{
+  --bg:#06111A;--panel:#0B1C2B;--ink:#DFF6FF;--mute:#78B3CE;--line:#184563;
+  --ok:#00E5B0;--warn:#FFC83D;--crit:#FF5A5F;--acc:#00D4FF;
+  --deep:#0099CC;--light:#38BDF8;--rem:#00E5B0;--awake:#FFC83D;
+  background-image:linear-gradient(rgba(0,212,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.06) 1px,transparent 1px);
+  background-size:26px 26px;
+}
+body.hud-mode .trace,body.hud-mode .mod-bar,body.hud-mode .vocal-panel,body.hud-mode .mc,body.hud-mode .scard,body.hud-mode .wake-box,body.hud-mode .ai-hud{
+  box-shadow:0 0 0 1px rgba(0,212,255,.35),0 0 22px rgba(0,212,255,.12);
+}
+
+/* Header */
+.top{position:sticky;top:0;z-index:25;background:var(--panel);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.top .wrap{display:flex;align-items:center;gap:1.25rem;min-height:3.4rem;flex-wrap:wrap}
+.brand{font-weight:700;margin-inline-end:auto;letter-spacing:.01em;display:flex;align-items:center;gap:.5rem}
+.sysdot{width:9px;height:9px;border-radius:50%;background:var(--ok);display:inline-block}
+.top nav{display:flex;gap:1rem;flex-wrap:wrap;font-size:.9rem}
+.top nav a{color:var(--mute);text-decoration:none;padding:.2rem 0}
+.top nav a:hover{color:var(--ink)}
+.clock{font-size:.88rem;color:var(--mute)}
+a:focus-visible,button:focus-visible,summary:focus-visible,select:focus-visible,input:focus-visible+span{outline:2px solid var(--acc);outline-offset:2px}
+
+/* Lead & ECG */
+.lead{padding:1.8rem 0 1.2rem;display:grid;grid-template-columns:1fr 1.1fr;gap:1.5rem;align-items:center}
+.lead h1{font-size:clamp(1.6rem,3.6vw,2.3rem);line-height:1.2;margin:0 0 .45rem;font-weight:700}
+.lead p{margin:0;color:var(--mute);max-width:36rem}
+.trace{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.6rem .85rem}
+.trace canvas{width:100%;height:92px;display:block}
+.trace div{display:flex;justify-content:space-between;font-size:.83rem;color:var(--mute)}
+
+/* Event Simulation Bar */
+.sim{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;padding:.8rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.88rem}
+.sim span{color:var(--mute);margin-inline-end:.3rem;font-weight:500}
+button{font:inherit;font-size:.86rem;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:.38rem .8rem;cursor:pointer;transition:border-color .15s,background .15s}
+button:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);color:var(--panel);border-color:var(--acc);font-weight:600}
+button[aria-pressed="true"]{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 15%,var(--panel));box-shadow:inset 0 0 0 1px var(--acc);font-weight:600}
+
+/* Top Crew Module Controls Bar */
+.mod-bar{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;padding:.75rem 1rem;margin:.85rem 0 0;background:var(--panel);border:1px solid var(--line);border-radius:8px;font-size:.85rem}
+.mod-title{font-weight:700;color:var(--acc);margin-inline-end:auto}
+.tog{display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;user-select:none;padding:.26rem .55rem;border-radius:6px;border:1px solid var(--line);background:var(--bg)}
+.tog input{position:absolute;opacity:0}
+.tog-pill{width:30px;height:16px;background:var(--line);border-radius:99px;position:relative;transition:background .2s}
+.tog-pill::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--panel);transition:transform .2s}
+.tog input:checked+.tog-pill{background:var(--ok)}
+.tog input:checked+.tog-pill::after{transform:translateX(14px)}
+.paused-banner{display:none;background:color-mix(in srgb,var(--warn) 14%,var(--panel));border:1px solid var(--warn);color:var(--ink);padding:.55rem .85rem;border-radius:6px;font-size:.85rem;margin-bottom:.75rem}
+.module-off .paused-banner{display:block}
+.module-off .mod-content{opacity:.38;pointer-events:none;filter:grayscale(.7)}
+
+/* Sections & Clinical Metric Rows */
+section.blk{padding:2.3rem 0 .4rem}
+h2{font-size:1.4rem;margin:0 0 .2rem;font-weight:700}
+.sub{color:var(--mute);margin:0 0 1rem;font-size:.93rem}
+.grp{margin:1.35rem 0 .25rem;font-weight:700;font-size:.95rem;color:var(--acc)}
+.row{display:grid;grid-template-columns:minmax(150px,1.3fr) 130px minmax(140px,2fr) 84px;gap:.4rem 1.1rem;align-items:center;padding:.8rem 0;border-bottom:1px solid var(--line)}
+.row .nm{font-weight:500}.row .nm small{display:block;color:var(--mute);font-weight:400;font-size:.8rem}
+.row .val b{font-size:1.4rem;font-weight:700}.row .val{color:var(--mute);font-size:.84rem}
+.gauge{position:relative;height:8px;background:var(--line);border-radius:4px}
+.gauge .zone{position:absolute;top:0;bottom:0;background:var(--ok);opacity:.38;border-radius:4px}
+.gauge .mk{position:absolute;top:-5px;width:4px;height:18px;margin-left:-2px;background:var(--ok);border-radius:2px;transition:left .5s}
+.st{font-size:.84rem;font-weight:700;color:var(--ok)}
+.s-warn .mk{background:var(--warn)}.s-warn .st{color:var(--warn)}
+.s-crit .mk{background:var(--crit)}.s-crit .st{color:var(--crit)}
+.ref{grid-column:1/-1;order:6;display:grid;grid-template-columns:.7fr 1.3fr 1.3fr;gap:.6rem;font-size:.84rem;color:var(--mute);margin-top:.3rem}
+.rc{border-top:2px solid var(--line);padding:.4rem .1rem}
+.rc h4{margin:0 0 .15rem;font-size:.86rem;color:var(--ink)}
+.rc p{margin:.1rem 0}
+.rc b{font-weight:600;color:var(--ink)}
+.rc.on{border-color:var(--warn);color:var(--ink);background:var(--panel);padding-inline:.6rem;border-radius:4px}
+.s-crit .rc.on{border-color:var(--crit)}
+
+/* Vocal Fold Acoustic Screening */
+.vocal-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:1rem 1.15rem;margin:.6rem 0 1.2rem}
+.vocal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin-bottom:.8rem}
+.vocal-head h3{margin:0;font-size:1.05rem;font-weight:700}
+.vocal-head p{margin:.2rem 0 0;font-size:.86rem;color:var(--mute);max-width:42rem}
+.vocal-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.vocal-viz{display:grid;grid-template-columns:1.2fr 1fr;gap:1rem;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.65rem .85rem;margin-bottom:.85rem}
+.vocal-viz canvas{width:100%;height:64px;display:block}
+.badge{display:inline-block;padding:.18rem .55rem;border-radius:99px;font-size:.78rem;font-weight:700;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);margin-bottom:.25rem}
+.badge.warn{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+.badge.crit{background:color-mix(in srgb,var(--crit) 20%,transparent);color:var(--crit)}
+.vocal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem}
+.vcard{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.65rem .8rem}
+.vcard small{display:block;color:var(--mute);font-size:.78rem}
+.vcard b{font-size:1.35rem;font-weight:700}
+.vcard span{font-size:.8rem;color:var(--mute)}
+.vcard p{margin:.25rem 0 0;font-size:.77rem;color:var(--mute)}
+
+/* Sleep Architecture & Smart Wake-up */
+.sensor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1rem}
+.scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.75rem .9rem;font-size:.84rem}
+.scard b{display:block;font-size:.92rem;color:var(--acc);margin-bottom:.2rem}
+.sl4{display:grid;grid-template-columns:1.2fr repeat(3,1fr);gap:.75rem;margin-bottom:.9rem}
+.mc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem .9rem}
+.mc small{display:block;color:var(--mute);font-size:.79rem}.mc b{font-size:1.6rem;font-weight:700}.mc span{font-size:.8rem;color:var(--mute)}
+.stk{display:flex;height:16px;border-radius:4px;overflow:hidden;margin:.85rem 0 .45rem}
+.slg{display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.84rem;color:var(--mute)}.slg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-inline-end:.35rem}.slg b{color:var(--ink);font-weight:600}
+.hyp{width:100%;height:auto;display:block;background:var(--panel);border:1px solid var(--line);border-radius:8px;margin:.6rem 0;cursor:crosshair}
+.hyp-tip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--panel);padding:.5rem .75rem;border-radius:6px;font-size:.8rem;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.25);max-width:240px;display:none}
+
+.wake-box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:1rem 1.15rem;margin:1rem 0}
+.wake-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.7rem}
+.wake-head h3{margin:0;font-size:1.02rem;font-weight:700}
+.wake-controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.wake-controls select{font:inherit;font-size:.84rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:.38rem .65rem}
+.actuators{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-top:.7rem}
+.act-card{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.65rem .8rem;font-size:.82rem;transition:border-color .3s,background .3s}
+.act-card b{display:block;font-size:.88rem;margin-bottom:.15rem}
+.act-card.firing{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,var(--bg));animation:pulseCard .65s ease-in-out 4}
+@keyframes pulseCard{0%,100%{transform:scale(1)}50%{transform:scale(1.025)}}
+.wake-log{margin-top:.75rem;padding:.55rem .8rem;border-radius:6px;background:var(--bg);border-inline-start:4px solid var(--acc);font-size:.85rem}
+
+/* Exercise, Alerts, Mental Health */
+.bar{height:18px;background:var(--line);border-radius:4px;position:relative;overflow:hidden;margin:.55rem 0}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--acc);transition:width .35s;width:0}
+.exhead{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+.exhead b{font-size:1.55rem}
+.alert{border:1px solid var(--crit);border-inline-start-width:5px;background:var(--panel);padding:.7rem 1rem;margin-bottom:.65rem;font-weight:500;border-radius:6px}
+.alert[hidden]{display:none}
+.alert.w{border-color:var(--warn)}
+fieldset{border:0;padding:0;margin:0 0 1rem}
+legend{font-weight:500;padding:0;margin-bottom:.35rem}
+.scale{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.scale label{cursor:pointer}
+.scale input{position:absolute;opacity:0}
+.scale span{display:inline-block;min-width:2.5rem;text-align:center;padding:.32rem 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.scale input:checked+span{background:var(--acc);color:var(--panel);border-color:var(--acc);font-weight:700}
+.scale em{font-style:normal;font-size:.8rem;color:var(--mute)}
+.hist{display:flex;gap:.3rem;margin:.85rem 0;align-items:center;font-size:.84rem;color:var(--mute);flex-wrap:wrap}
+.hist i{width:17px;height:17px;border-radius:3px;background:var(--ok)}
+.hist i.p{background:var(--crit)}
+.support{border:1px solid var(--warn);background:var(--panel);padding:1rem 1.15rem;margin-top:.9rem;border-radius:8px;display:grid;grid-template-columns:1fr auto;gap:1.1rem;align-items:center}
+.support[hidden]{display:none}
+.breath{width:104px;height:104px;border-radius:50%;border:2px solid var(--acc);display:grid;place-items:center;font-size:.88rem;transition:transform 4s ease-in-out;text-align:center}
+.breath.in{transform:scale(1.16)}
+.breath.out{transition-duration:6s}
+.note{padding:.5rem 0;color:var(--mute);font-size:.9rem}
+details{border-bottom:1px solid var(--line);padding:.5rem 0}
+summary{cursor:pointer;font-weight:500}
+details dl{margin:.5rem 0 .3rem;display:grid;grid-template-columns:8rem 1fr;gap:.2rem .8rem;font-size:.9rem}
+details dt{color:var(--mute)}details dd{margin:0}
+footer{margin-top:2.8rem;padding:1.4rem 0 2.5rem;border-top:1px solid var(--line);font-size:.84rem;color:var(--mute)}
+footer ul{padding-inline-start:1.2rem;margin:.4rem 0}
+
+/* Persistent Floating AI Flight Surgeon Co-Pilot */
+.ai-hud{position:fixed;right:1rem;bottom:calc(1rem + env(safe-area-inset-bottom,0px));z-index:45;width:min(385px,calc(100vw - 2rem));background:var(--panel);border:1.5px solid var(--acc);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden}
+.ai-hud.hidden-hud{display:none}
+.ai-hud-head{display:flex;align-items:center;justify-content:space-between;gap:.45rem;padding:.65rem .9rem;background:color-mix(in srgb,var(--acc) 15%,var(--panel));border-bottom:1px solid var(--line);cursor:pointer}
+.ai-hud-title{display:flex;align-items:center;gap:.45rem;font-weight:700;font-size:.9rem}
+.ai-pulse{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+.ai-net{font-size:.72rem;font-weight:700;padding:.18rem .5rem;border-radius:99px;border:1px solid var(--line);background:var(--bg);cursor:pointer}
+.ai-net.edge{border-color:var(--warn);color:var(--warn)}
+.ai-net.cloud{border-color:var(--ok);color:var(--ok)}
+.ai-body{padding:.75rem .9rem;display:flex;flex-direction:column;gap:.6rem;max-height:345px}
+.ai-hud.collapsed .ai-body{display:none}
+.ai-insight{font-size:.81rem;line-height:1.42;padding:.5rem .7rem;border-radius:6px;background:color-mix(in srgb,var(--acc) 11%,var(--bg));border-inline-start:3px solid var(--acc)}
+.ai-msgs{overflow-y:auto;max-height:140px;display:flex;flex-direction:column;gap:.4rem;font-size:.83rem;padding-right:.15rem}
+.ai-msg{padding:.48rem .68rem;border-radius:8px;line-height:1.42;max-width:92%}
+.ai-msg.bot{background:var(--bg);border:1px solid var(--line);align-self:flex-start}
+.ai-msg.usr{background:var(--acc);color:var(--panel);align-self:flex-end}
+.ai-chips{display:flex;gap:.35rem;flex-wrap:wrap}
+.ai-chips button{font-size:.74rem;padding:.24rem .52rem;border-radius:99px;background:var(--bg)}
+.ai-form{display:flex;gap:.4rem}
+.ai-form input{flex:1;min-width:0;font:inherit;font-size:.83rem;padding:.4rem .6rem;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.ai-form button{padding:.4rem .72rem;font-size:.83rem}
+
+@media (max-width:840px){
+  .sensor-grid,.actuators,.vocal-grid{grid-template-columns:1fr 1fr}
+  .sl4{grid-template-columns:1fr 1fr}
+  .vocal-viz{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .lead{grid-template-columns:1fr}
+  .row{grid-template-columns:1fr auto}
+  .row .gauge{grid-column:1/-1;order:5}
+  .ref{grid-template-columns:1fr}
+  .support{grid-template-columns:1fr}
+  .sensor-grid,.actuators,.vocal-grid{grid-template-columns:1fr}
+  details dl{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <span class="brand"><i class="sysdot" id="sysdot"></i>Crew Health Monitor</span>
+  <nav aria-label="Sections">
+    <a href="#cv">Heart &amp; immunity</a>
+    <a href="#sleep">Sleep &amp; wake</a>
+    <a href="#ex">Exercise &amp; bones</a>
+    <a href="#env">Environment</a>
+    <a href="#mind">Mental health</a>
+  </nav>
+  <span class="clock" id="clock"></span>
+</div></header>
+
+<main class="wrap">
+  <div class="lead">
+    <div>
+      <h1 id="sumline">Reading indicators</h1>
+      <p id="sumsub">Simulated microgravity telemetry updates every two seconds. Trigger an event below to test clinical responses.</p>
+    </div>
+    <div class="trace">
+      <canvas id="ecg" width="640" height="92" aria-label="Live heart trace"></canvas>
+      <div><span>Live ECG Waveform</span><span id="hrlive">62 bpm</span></div>
+    </div>
+  </div>
+
+  <!-- SIMULATION EVENTS -->
+  <div class="sim" role="group" aria-label="Simulation events">
+    <span>Simulate:</span>
+    <button data-ev="storm" aria-pressed="false">Solar storm</button>
+    <button data-ev="blackout" aria-pressed="false">Signal blackout</button>
+    <button data-ev="dehy" aria-pressed="false">Dehydration &amp; strain</button>
+    <button data-ev="inf" aria-pressed="false">Immune disruption</button>
+    <button data-ev="sugar" aria-pressed="false">Low blood sugar</button>
+    <button data-ev="sleep" aria-pressed="false">Low deep sleep</button>
+    <button data-ev="bone" aria-pressed="false">Faster bone loss</button>
+    <button data-ev="co2" aria-pressed="false">CO₂ rise</button>
+    <button id="reset">Reset to normal</button>
+  </div>
+
+  <!-- 1. TOP MODULE CONTROL BAR -->
+  <div class="mod-bar" role="region" aria-label="Crew Module Controls">
+    <span class="mod-title">Crew Module Controls:</span>
+    <label class="tog"><input type="checkbox" id="tog-wake" checked><span class="tog-pill"></span><span>Smart Wake-up</span></label>
+    <label class="tog"><input type="checkbox" id="tog-vocal" checked><span class="tog-pill"></span><span>Vocal Immunity</span></label>
+    <label class="tog"><input type="checkbox" id="tog-ai" checked><span class="tog-pill"></span><span>AI Co-Pilot HUD</span></label>
+    <label class="tog"><input type="checkbox" id="tog-hud"><span class="tog-pill"></span><span>Hologram Grid</span></label>
+  </div>
+
+  <!-- 2. CARDIOVASCULAR & IMMUNE STATUS + VOCAL FOLD SCREENING -->
+  <section class="blk" id="cv">
+    <h2>Cardiovascular and immune status</h2>
+    <p class="sub">Ranges are calibrated for microgravity. Under every reading: the normal range, what it means if the value rises or falls, and what to do.</p>
+    <div id="rows-cv"></div>
+
+    <div class="grp">Vocal cord acoustic immune biomarkers (Vagus nerve &amp; micro-inflammation)</div>
+    <div class="vocal-panel" id="vocal-panel">
+      <div class="paused-banner">Module paused per astronaut preference. Other cardiovascular and immune telemetry remains active.</div>
+      <div class="mod-content">
+        <div class="vocal-head">
+          <div>
+            <h3>Vocal Fold Acoustic Screening</h3>
+            <p>Detects sub-clinical laryngeal micro-inflammation, latent viral reactivation, and vagus nerve stress via Fundamental Frequency (F₀), Pitch Jitter (%), Amplitude Shimmer (%), and Harmonic-to-Noise Ratio (HNR).</p>
+          </div>
+          <div class="vocal-actions">
+            <button class="pri" id="btn-voice-scan">5s Live Mic Scan</button>
+            <button id="btn-voice-sim" aria-pressed="false">Simulate Vocal Strain</button>
+          </div>
+        </div>
+        <div class="vocal-viz">
+          <canvas id="voice-canvas" width="520" height="64" aria-label="Vocal acoustic waveform"></canvas>
+          <div>
+            <span class="badge" id="vocal-badge">Vocal Fold Baseline: Optimal</span>
+            <div id="vocal-summary" style="font-size:.84rem;color:var(--mute)">No laryngeal micro-inflammation detected. Vagal tone and mucosal hydration are within baseline limits.</div>
+          </div>
+        </div>
+        <div class="vocal-grid" id="vocal-cards"></div>
+      </div>
+    </div>
+
+    <div class="grp">White blood cells (share of total)</div>
+    <div id="rows-wbc"></div>
+    <div class="grp">Blood sugar, blood cells and immunity</div>
+    <div id="rows-bld"></div>
+  </section>
+
+  <!-- 3. MULTI-SENSOR SLEEP ARCHITECTURE & SMART WAKE-UP -->
+  <section class="blk" id="sleep">
+    <h2>Sleep architecture &amp; biometric staging</h2>
+    <p class="sub">Fuses three continuous wearable signals: <b>Optical PPG</b> (heart rate &amp; HRV), <b>3-Axis Movement</b>, and <b>Breathing Pattern Tracking</b> to classify Deep (N3), Light (N1/N2), REM, and Awake epochs.</p>
+
+    <div class="sensor-grid">
+      <div class="scard"><b>1. Optical PPG Sensor</b>Tracks beat-to-beat heart rate &amp; sleep HRV (autonomic parasympathetic recovery).</div>
+      <div class="scard"><b>2. 3-Axis Accelerometer</b>Detects micro-movements &amp; brief awakenings in microgravity sleep restraints.</div>
+      <div class="scard"><b>3. Respiration Pattern</b>Tracks respiratory rate stability and apnea/hypopnea dips across sleep cycles.</div>
+    </div>
+
+    <div id="sl"></div>
+
+    <!-- Smart Wake-up & Multi-Sensory Actuators -->
+    <div class="wake-box" id="wake-box">
+      <div class="paused-banner">Smart Wake-up paused per astronaut preference — Free-sleep mode active (no automated wake stimuli will fire).</div>
+      <div class="mod-content">
+        <div class="wake-head">
+          <div>
+            <h3>Smart Wake-up &amp; Multi-Sensory Actuators</h3>
+            <p class="note" style="padding:0;margin:.15rem 0 0">Monitors sleep cycles and triggers silent wake stimuli during the first <b>Light Sleep</b> epoch inside your wake window to prevent Deep Sleep inertia.</p>
+          </div>
+          <div class="wake-controls">
+            <select id="wake-win" aria-label="Wake window">
+              <option value="06:30 – 07:00">Window: 06:30 – 07:00</option>
+              <option value="07:00 – 07:30" selected>Window: 07:00 – 07:30</option>
+              <option value="07:30 – 08:00">Window: 07:30 – 08:00</option>
+            </select>
+            <button class="pri" id="btn-test-wake">Test Smart Wake-up</button>
+          </div>
+        </div>
+        <div class="actuators">
+          <div class="act-card" id="act-haptic"><b>1. Haptic Wrist Pulse</b>Silent micro-vibrations on the wearable band (zero cabin noise).</div>
+          <div class="act-card" id="act-led"><b>2. 480nm Blue-Enriched Dawn LED</b>Gradual sunrise spectrum ramp to suppress melatonin naturally.</div>
+          <div class="act-card" id="act-audio"><b>3. Gradual Binaural Audio</b>Soft alpha-to-beta acoustic tones in crew sleep earphones.</div>
+        </div>
+        <div class="wake-log" id="wake-log">Status: <b>Active</b>. Armed for first Light Sleep phase inside <b>07:00 – 07:30</b>.</div>
+      </div>
+    </div>
+
+    <div class="sim" style="margin-top:1rem">
+      <span>Night profile:</span>
+      <button id="n1" aria-pressed="true">Normal night</button>
+      <button id="n2" aria-pressed="false">Poor / fragmented night</button>
+    </div>
+    <div id="rows-slp"></div>
+    <p class="note">Hover or tap anywhere along the hypnogram or sensor traces above to inspect exact 5-minute epoch readings.</p>
+  </section>
+
+  <!-- 4. EXERCISE & BONES -->
+  <section class="blk" id="ex">
+    <h2>Exercise and bone density</h2>
+    <p class="sub">Daily exercise limits bone and muscle loss. Daily goal: 2 hours.</p>
+    <div class="exhead"><span><b id="exh">0</b> of 2 h</span><span id="exmsg" class="st"></span></div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="120" id="exbar"><i></i></div>
+    <div class="sim" style="border:0;padding:0"><button class="pri" data-add="15">Add 15 min</button><button data-add="30">Add 30 min</button><button data-add="-15">Undo 15 min</button></div>
+    <div class="grp">Bone density</div><div id="rows-bone"></div>
+    <p class="note">Expected by this time of day: <span id="exexp"></span>. Approved equipment: treadmill and bike with harnesses, and the ARED resistance device.</p>
+  </section>
+
+  <!-- 5. CAPSULE ENVIRONMENT & RADIATION -->
+  <section class="blk" id="env">
+    <h2>Capsule environment and radiation</h2>
+    <p class="sub">Dose inside the vehicle and carbon dioxide concentration.</p>
+    <div class="alert" id="radalert" hidden>Alert: radiation level is high. Move to the shielded area of the capsule.</div>
+    <div id="rows-env"></div>
+  </section>
+
+  <!-- 6. MENTAL & BEHAVIORAL WELL-BEING -->
+  <section class="blk" id="mind">
+    <h2>Mental and behavioral well-being</h2>
+    <p class="sub">A three-question daily check-in. Three hard days in a row triggers a support message.</p>
+    <div id="qs"></div>
+    <div class="sim" style="border:0;padding:0"><button class="pri" id="save">Save today’s check-in</button><button id="demo">Demo: three hard days</button><button id="clr">Clear history</button></div>
+    <div class="hist" id="hist"></div>
+    <p id="mres" class="note" aria-live="polite"></p>
+    <div class="support" id="support" hidden>
+      <div>
+        <b>Three days in a row of high stress or poor sleep.</b>
+        <p style="margin:.3rem 0 0">Chronic stress raises cortisol and weakens immunity. Try the breathing exercise beside this note, then lighten tomorrow’s schedule, keep a fixed bedtime, and talk to the flight surgeon or a support specialist on the ground.</p>
+      </div>
+      <div class="breath" id="breath" aria-live="polite">Inhale</div>
+    </div>
+    <h3 style="margin:1.6rem 0 .3rem;font-size:1.05rem">Hormones that affect behavior</h3>
+    <div id="hormones"></div>
+  </section>
+
+  <footer>
+    <p>Simulation prototype with synthetic microgravity telemetry and optional live microphone acoustic analysis. Clinical thresholds reflect aerospace medicine baselines for demonstration purposes.</p>
+    <ul>
+      <li><a href="https://www.nasa.gov/hrp/" target="_blank" rel="noopener">NASA Human Research Program</a></li>
+      <li><a href="https://www.esa.int/Science_Exploration/Human_and_Robotic_Exploration" target="_blank" rel="noopener">ESA Human and Robotic Exploration</a></li>
+      <li><a href="https://pubmed.ncbi.nlm.nih.gov/" target="_blank" rel="noopener">PubMed</a></li>
+    </ul>
+  </footer>
+</main>
+
+<div class="hyp-tip" id="hyp-tip"></div>
+
+<!-- PERSISTENT FLOATING AI FLIGHT SURGEON CO-PILOT -->
+<aside class="ai-hud" id="ai-hud" aria-label="AI Flight Surgeon Co-Pilot">
+  <div class="ai-hud-head" id="ai-hud-head">
+    <div class="ai-hud-title"><i class="ai-pulse"></i><span>AI Flight Surgeon</span></div>
+    <div style="display:flex;align-items:center;gap:.35rem">
+      <button type="button" class="ai-net cloud" id="ai-net-btn" title="Switch Cloud API vs Edge AI Offline">Cloud API (Gemini)</button>
+      <button type="button" id="ai-min-btn" aria-label="Minimize or expand AI Co-Pilot" style="padding:.12rem .45rem;font-size:.8rem">–</button>
+    </div>
+  </div>
+  <div class="ai-body">
+    <div class="ai-insight" id="ai-live-insight">Scanning multi-sensor telemetry...</div>
+    <div class="ai-msgs" id="ai-msgs">
+      <div class="ai-msg bot">Ready, Commander. I continuously cross-correlate your PPG vitals, sleep stages, vocal fold biomarkers, and cabin atmosphere. Tap a prompt or ask a question below.</div>
+    </div>
+    <div class="ai-chips">
+      <button type="button" data-q="Full status synthesis">Full synthesis</button>
+      <button type="button" data-q="Immunity & vocal check">Immunity &amp; voice</button>
+      <button type="button" data-q="Sleep & smart wake status">Sleep &amp; wake</button>
+      <button type="button" data-q="How does Edge AI work offline?">Edge AI offline</button>
+    </div>
+    <form class="ai-form" id="ai-form">
+      <input type="text" id="ai-input" placeholder="Ask AI Flight Surgeon..." autocomplete="off">
+      <button type="submit" class="pri">Ask</button>
+    </form>
+  </div>
+</aside>
+
+<script>
+const $=s=>document.querySelector(s);
+const G='Recheck the reading and share the result with the flight surgeon.';
+
+/* =========================================================
+   CLINICAL INDICATORS & MICROGRAVITY RANGES
+   ========================================================= */
+const M=[
+{id:'hr',g:'cv',n:'Heart rate',u:'bpm',v:62,n1:50,n2:70,c1:48,c2:85,s1:30,s2:150,d:0,
+ lo:['Circulatory drop, dizziness, and too little blood reaching the brain.','Urgent visual HUD alert with audible tone, plus a 4s inhale / 4s exhale drill to raise blood pressure and cerebral perfusion.','Take an electrolyte capsule and drink treated station water.','Nutritional fix'],
+ hi:['Acute strain on the heart muscle, lack of sleep, or early infection.','Activate Calm Mode: silence non-essential notifications and play soothing headset tones to lower heart rate gradually.','Cancel strenuous physical tasks today and notify the flight surgeon on the ground.','Preventive fix']},
+{id:'spo2',g:'cv',n:'Blood oxygen (SpO₂)',u:'%',v:98,n1:95,n2:100,c1:90,c2:101,s1:80,s2:100,d:0,
+ lo:['Low blood oxygen. Check CO₂ levels and capsule ventilation.','Breathe slowly and deeply, reduce effort, check CO₂ scrubbers, and notify mission control if persistent.']},
+{id:'bp',g:'cv',n:'Systolic blood pressure',u:'mmHg',v:118,n1:95,n2:135,c1:85,c2:150,s1:60,s2:180,d:0,
+ lo:['Risk of fainting and loss of focus during critical tasks.','HUD displays illustrated muscle-pump exercises (rhythmic leg and abdominal contractions) to return pooled blood to the heart and brain within 2 minutes.','Raise sodium allowance in the next meal.','Nutritional fix'],
+ hi:['Sudden pressure on blood vessels and the brain.','Start extended-exhale breathing to calm sympathetic tone and pause high-focus tasks for 10 minutes.']},
+{id:'neu',g:'wbc',n:'Neutrophils',u:'%',v:62,n1:55,n2:70,c1:40,c2:85,s1:20,s2:100,d:1,
+ lo:['Weak immunity, acute viral infection, or radiation affecting bone marrow.','Improve shielding, sleep and nutrition, and run a follow-up blood test.','Antioxidant-rich foods and vitamins C and D.'],
+ hi:['Bacterial infection, acute inflammation, severe physical strain, or high cortisol.','Check for signs of infection, reduce stress, and inform the flight surgeon.']},
+{id:'lym',g:'wbc',n:'Lymphocytes',u:'%',v:30,n1:20,n2:40,c1:12,c2:55,s1:0,s2:70,d:1,
+ lo:['Common in space: weaker immune response from radiation or stress hormones.','Add antioxidant-rich food and vitamins D and C, keep a steady sleep schedule, and manage stress.'],
+ hi:['Viral infection or immune activation.','Monitor symptoms and repeat the test.']},
+{id:'mon',g:'wbc',n:'Monocytes',u:'%',v:5,n1:2,n2:8,c1:.5,c2:12,s1:0,s2:15,d:1,
+ lo:['Bone-marrow disorder or immune suppression.',G],hi:['Chronic inflammation or infection.',G]},
+{id:'eos',g:'wbc',n:'Eosinophils',u:'%',v:2.5,n1:1,n2:4,c1:0,c2:8,s1:0,s2:10,d:1,
+ lo:['Acute stress or increased cortisol release.',G],hi:['Severe allergy, asthma, or parasitic reaction.',G]},
+{id:'bas',g:'wbc',n:'Basophils',u:'%',v:.7,n1:.5,n2:1,c1:.1,c2:2,s1:0,s2:2.5,d:2,
+ lo:['Severe stress or acute allergic reaction.',G],hi:['Allergy or chronic inflammation.',G]},
+{id:'rad',g:'env',n:'Radiation dose rate',u:'µSv/h',v:18,n1:0,n2:30,c1:-1,c2:80,s1:0,s2:150,d:0,
+ hi:['Dose is above normal inside the vehicle and indicates a solar particle event.','Move to the shielded area of the capsule immediately until mission control clears the alert.']},
+{id:'co2',g:'env',n:'Carbon dioxide (CO₂)',u:'ppm',v:2400,n1:0,n2:3000,c1:-1,c2:5000,s1:0,s2:7000,d:0,
+ hi:['High CO₂ causes headache, drowsiness and faster breathing.','Inspect CO₂ scrubbers, increase cabin airflow, and avoid stagnant corners.']},
+{id:'glu',g:'bld',n:'Blood glucose (fasting)',u:'mg/dL',v:86,n1:70,n2:99,c1:65,c2:130,s1:40,s2:200,d:0,
+ lo:['Tremor, cold sweat, blurred vision, and rapid loss of focus.','HUD guides astronaut to nearest fast-acting carbs in emergency kit. Target: stable glucose within 15 minutes.','Shorten gaps between upcoming meals to prevent repeat drops.','Preventive fix'],
+ hi:['Severe thirst, fatigue, and reduced immune efficiency.','Drink prescribed water and perform light resistance movement to burn excess glucose.','Reduce simple starches and add fiber and protein.','Nutritional fix']},
+{id:'rbc',g:'bld',n:'Red blood cells (RBC)',u:'×10¹²/L',v:5,n1:4.2,n2:5.9,c1:3.8,c2:6.5,s1:3,s2:7,d:1,
+ lo:['Space anemia: accelerated red-cell destruction reducing oxygen delivery.',G,'Supportive nutrition and regular follow-up tests.'],hi:['Dehydration or reduced plasma volume.','Drink fluids and recheck.']},
+{id:'plt',g:'bld',n:'Platelets',u:'×10⁹/L',v:250,n1:150,n2:400,c1:100,c2:500,s1:50,s2:600,d:0,
+ lo:['Low platelets raise bleeding risk.',G],hi:['High platelets raise clotting risk.',G]},
+{id:'imm',g:'bld',n:'Immune activity vs. personal baseline',u:'%',v:97,n1:80,n2:130,c1:65,c2:131,s1:50,s2:130,d:0,
+ lo:['Reactivation of latent viruses, elevated inflammation and infection risk.','Activate Digital Vagus Nerve Activation protocol: guided vocal and breathing exercises to lower cortisol and restore anti-inflammatory vagal tone.','Prioritize station meals rich in antioxidants, vitamin C, and vitamin D.','Nutritional fix']},
+{id:'bone',g:'bone',n:'Bone loss rate',u:'%/month',v:.7,n1:0,n2:1,c1:-1,c2:1.2,s1:0,s2:2,d:2,
+ hi:['Rapid bone demineralization caused by microgravity unloading.','Increase mechanical load angles on ARED resistance equipment to stimulate osteoblasts.','Optimize timing for calcium, vitamin D3, and vitamin K2 supplements.','Drug / nutritional fix']},
+{id:'slp',g:'slp',n:'Deep sleep (last night)',u:'min',v:105,n1:90,n2:120,c1:45,c2:150,s1:0,s2:150,d:0,
+ lo:['Slow reaction time, irritability, and impaired muscle/bone repair.','Block blue wavelengths in cabin lighting and play delta binaural beats to promote slow-wave sleep.','Advance bedtime in tomorrow’s schedule and cancel late tasks.','Preventive fix']}
+];
+
+const base={};M.forEach(m=>base[m.id]=m.v);
+const tgt={...base};
+const EV={
+  storm:{rad:120},
+  blackout:{},
+  dehy:{hr:112,bp:84},
+  inf:{lym:14,neu:76,imm:68},
+  co2:{co2:5400,spo2:92},
+  sugar:{glu:58},
+  sleep:{slp:30},
+  bone:{bone:1.5}
+};
+let active=new Set();
+
+const fmt=(m,v)=>m.d?v.toFixed(m.d):Math.round(v);
+function status(m,v){
+  if(v<m.n1)return[v<m.c1?'crit':'warn','lo'];
+  if(v>m.n2)return[v>m.c2?'crit':'warn','hi'];
+  return['ok',''];
+}
+const LBL={ok:'Normal',warn:'Watch',crit:'Danger'};
+const range=m=>(m.n1<=0?'up to '+m.n2:m.n1+' to '+m.n2)+' '+m.u;
+function refHTML(m){
+  const col=(k,t,a)=>a?`<div class="rc" data-k="${k}"><h4>${t}</h4><p><b>Meaning:</b> ${a[0]}</p><p><b>Immediate fix:</b> ${a[1]}</p>${a[2]?`<p><b>${a[3]||'Prevention & nutrition'}:</b> ${a[2]}</p>`:''}</div>`:'';
+  return `<div class="ref"><div class="rc"><h4>Normal range</h4><p>${range(m)}</p></div>${col('hi','If high',m.hi)}${col('lo','If low',m.lo)}</div>`;
+}
+function build(){
+  M.forEach(m=>{
+    const p=x=>((x-m.s1)/(m.s2-m.s1)*100);
+    const z0=Math.max(0,p(m.n1)),z1=Math.min(100,p(m.n2));
+    const el=document.createElement('div');el.className='row s-ok';el.id='r-'+m.id;
+    el.innerHTML=`<div class="nm">${m.n}<small>Normal: ${range(m)}</small></div>
+    <div class="val"><b></b> ${m.u}</div>
+    <div class="gauge"><i class="zone" style="left:${z0}%;width:${z1-z0}%"></i><i class="mk"></i></div>
+    <div class="st"></div>${refHTML(m)}`;
+    $('#rows-'+m.g).appendChild(el);
+  });
+}
+
+/* =========================================================
+   VOCAL FOLD ACOUSTIC IMMUNE SCREENING
+   ========================================================= */
+let vocalState={f0:138,jitter:0.42,shimmer:2.1,hnr:22.4};
+let vocalStrainSim=false,micScanning=false;
+
+function getVocalStatus(v){
+  if(v.jitter>1.05||v.shimmer>4.2||v.hnr<15)return'crit';
+  if(v.jitter>0.75||v.shimmer>3.2||v.hnr<18.5)return'warn';
+  return'ok';
+}
+function renderVocal(){
+  const st=getVocalStatus(vocalState);
+  const badge=$('#vocal-badge'),sum=$('#vocal-summary');
+  if(st==='crit'){
+    badge.className='badge crit';badge.textContent='Vocal Alert: Laryngeal Micro-Inflammation';
+    sum.textContent='Elevated Jitter & Shimmer with reduced HNR indicate mucosal swelling and vagal stress—early marker of viral reactivation or immune dip.';
+  }else if(st==='warn'){
+    badge.className='badge warn';badge.textContent='Vocal Watch: Mild Vagal / Mucosal Strain';
+    sum.textContent='Slight pitch perturbation detected. Recommend hydration and 4-6 vagal breathing drill.';
+  }else{
+    badge.className='badge';badge.textContent='Vocal Fold Baseline: Optimal';
+    sum.textContent='No laryngeal micro-inflammation detected. Vagal tone and mucosal hydration are within baseline limits.';
+  }
+  const items=[
+    {n:'Fundamental Freq (F₀)',v:vocalState.f0.toFixed(0),u:'Hz',d:'Baseline: 110–165 Hz'},
+    {n:'Pitch Jitter',v:vocalState.jitter.toFixed(2),u:'%',d:'Normal: < 0.75% (cycle stability)'},
+    {n:'Amplitude Shimmer',v:vocalState.shimmer.toFixed(2),u:'%',d:'Normal: < 3.20% (glottal closure)'},
+    {n:'Harmonic-to-Noise (HNR)',v:vocalState.hnr.toFixed(1),u:'dB',d:'Normal: > 18.5 dB (clarity)'}
+  ];
+  $('#vocal-cards').innerHTML=items.map(i=>`<div class="vcard"><small>${i.n}</small><b>${i.v}</b> <span>${i.u}</span><p>${i.d}</p></div>`).join('');
+}
+
+let vPhase=0;
+function drawVocalWave(){
+  const c=$('#voice-canvas'),ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const acc=getComputedStyle(document.documentElement).getPropertyValue('--acc');
+  const warn=getComputedStyle(document.documentElement).getPropertyValue('--warn');
+  const st=getVocalStatus(vocalState);
+  ctx.strokeStyle=st==='ok'?acc:warn;
+  ctx.lineWidth=2;ctx.beginPath();
+  const jitterAmp=vocalState.jitter*7;
+  for(let x=0;x<c.width;x++){
+    const env=Math.sin((x/c.width)*Math.PI);
+    const noise=(Math.sin(x*0.37+vPhase*3)*jitterAmp);
+    const y=c.height/2 + Math.sin(x*0.07+vPhase)*20*env + noise*env;
+    x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  vPhase+=micScanning?0.24:0.06;
+  requestAnimationFrame(drawVocalWave);
+}
+
+$('#btn-voice-sim').onclick=()=>{
+  vocalStrainSim=!vocalStrainSim;
+  $('#btn-voice-sim').setAttribute('aria-pressed',vocalStrainSim);
+  if(vocalStrainSim){
+    vocalState={f0:152,jitter:1.24,shimmer:4.65,hnr:13.8};
+  }else{
+    vocalState={f0:138,jitter:0.42,shimmer:2.1,hnr:22.4};
+  }
+  renderVocal();updateAiInsight();
+};
+
+$('#btn-voice-scan').onclick=async()=>{
+  if(micScanning)return;
+  const btn=$('#btn-voice-scan');
+  micScanning=true;btn.textContent='Scanning 5s...';
+  let stream=null,audioCtx=null;
+  try{
+    if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+      stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      const src=audioCtx.createMediaStreamSource(stream);
+      const analyser=audioCtx.createAnalyser();
+      analyser.fftSize=1024;
+      src.connect(analyser);
+      const buf=new Float32Array(analyser.fftSize);
+      let rmsSum=0,samples=0;
+      const sampler=setInterval(()=>{
+        analyser.getFloatTimeDomainData(buf);
+        let s=0;for(let i=0;i<buf.length;i++)s+=buf[i]*buf[i];
+        rmsSum+=Math.sqrt(s/buf.length);samples++;
+      },120);
+      await new Promise(r=>setTimeout(r,5000));
+      clearInterval(sampler);
+      const avgRms=samples?rmsSum/samples:0.03;
+      const detectedF0=Math.min(185,Math.max(115,128+avgRms*420));
+      vocalState={
+        f0:detectedF0,
+        jitter:vocalStrainSim?1.18:+(0.36+Math.random()*0.18).toFixed(2),
+        shimmer:vocalStrainSim?4.4:+(1.9+Math.random()*0.5).toFixed(2),
+        hnr:vocalStrainSim?14.2:+(21.5+Math.random()*2.2).toFixed(1)
+      };
+    }else{
+      throw new Error('No mic');
+    }
+  }catch(e){
+    // Graceful simulated acoustic scan fallback if mic blocked in iframe
+    await new Promise(r=>setTimeout(r,2200));
+    vocalState=vocalStrainSim
+      ?{f0:151,jitter:1.21,shimmer:4.5,hnr:14.0}
+      :{f0:136+Math.round(Math.random()*6),jitter:+(0.38+Math.random()*0.12).toFixed(2),shimmer:+(2.0+Math.random()*0.35).toFixed(2),hnr:+(22.1+Math.random()*1.4).toFixed(1)};
+  }finally{
+    if(stream)stream.getTracks().forEach(t=>t.stop());
+    if(audioCtx)try{audioCtx.close()}catch(e){}
+    micScanning=false;btn.textContent='5s Live Mic Scan';
+    renderVocal();updateAiInsight();
+  }
+};
+
+/* =========================================================
+   PAINT & TELEMETRY LOOP
+   ========================================================= */
+function paint(){
+  let warn=0,crit=0;const bad=[];
+  M.forEach(m=>{
+    const [s,dir]=status(m,m.v),el=$('#r-'+m.id);
+    el.className='row s-'+s;
+    el.querySelector('b').textContent=fmt(m,m.v);
+    el.querySelector('.mk').style.left=Math.min(100,Math.max(0,(m.v-m.s1)/(m.s2-m.s1)*100))+'%';
+    el.querySelector('.st').textContent=LBL[s];
+    el.querySelectorAll('.rc').forEach(c=>c.classList.toggle('on',c.dataset.k===dir&&s!=='ok'));
+    if(s==='warn')warn++;if(s==='crit')crit++;
+    if(s!=='ok')bad.push(m.n);
+  });
+  const rad=M.find(m=>m.id==='rad'),r=status(rad,rad.v)[0];
+  $('#radalert').hidden=r==='ok';
+  $('#radalert').className='alert'+(r==='warn'?' w':'');
+  $('#sumline').textContent=crit&&warn?`${crit} in danger, ${warn} to watch`:crit?`${crit} indicator${crit>1?'s':''} in danger`:warn?`${warn} indicator${warn>1?'s':''} to watch`:'All indicators within normal range';
+  $('#sumsub').textContent=bad.length?'Affected: '+bad.join(', ')+'.':'No alerts right now. Simulated telemetry updates every two seconds.';
+  $('#hrlive').textContent=fmt(M[0],M[0].v)+' bpm';
+  $('#sysdot').style.background=crit?'var(--crit)':warn?'var(--warn)':'var(--ok)';
+  updateAiInsight();
+}
+function tick(){
+  M.forEach(m=>{
+    const amp=(m.s2-m.s1)*.014;
+    m.v+=(tgt[m.id]-m.v)*.25+(Math.random()-.5)*amp*2;
+    m.v=Math.min(m.s2,Math.max(m.s1,m.v));
+  });
+  paint();
+}
+function setTargets(){
+  M.forEach(m=>tgt[m.id]=base[m.id]);
+  active.forEach(e=>Object.assign(tgt,EV[e]));
+  if(active.has('inf')||vocalStrainSim){
+    vocalState={f0:153,jitter:1.25,shimmer:4.7,hnr:13.6};
+  }else{
+    vocalState={f0:138,jitter:0.42,shimmer:2.1,hnr:22.4};
+  }
+  renderVocal();
+}
+document.querySelectorAll('[data-ev]').forEach(b=>b.onclick=()=>{
+  const e=b.dataset.ev;
+  active.has(e)?active.delete(e):active.add(e);
+  b.setAttribute('aria-pressed',active.has(e));
+  setTargets();
+  if(e==='sleep')newNight(active.has('sleep')?.3:1);
+});
+$('#reset').onclick=()=>{
+  active.clear();vocalStrainSim=false;edgeManual=false;
+  $('#btn-voice-sim').setAttribute('aria-pressed','false');
+  document.querySelectorAll('[data-ev]').forEach(b=>b.setAttribute('aria-pressed','false'));
+  setTargets();newNight(1);
+};
+
+/* =========================================================
+   TOP MODULE CONTROL BAR & SMART WAKE-UP ACTUATORS
+   ========================================================= */
+let smartWakeOn=true;
+$('#tog-wake').onchange=e=>{
+  smartWakeOn=e.target.checked;
+  $('#wake-box').classList.toggle('module-off',!smartWakeOn);
+};
+$('#tog-vocal').onchange=e=>{
+  $('#vocal-panel').classList.toggle('module-off',!e.target.checked);
+};
+$('#tog-ai').onchange=e=>{
+  $('#ai-hud').classList.toggle('hidden-hud',!e.target.checked);
+};
+$('#tog-hud').onchange=e=>{
+  document.body.classList.toggle('hud-mode',e.target.checked);
+};
+$('#wake-win').onchange=()=>{
+  $('#wake-log').innerHTML=`Status: <b>Active</b>. Armed for first Light Sleep phase inside <b>${$('#wake-win').value}</b>.`;
+};
+
+function playWakeChime(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const now=ctx.currentTime;
+    [432,540,648].forEach((freq,idx)=>{
+      const osc=ctx.createOscillator(),gain=ctx.createGain();
+      osc.type='sine';osc.frequency.setValueAtTime(freq,now+idx*0.22);
+      gain.gain.setValueAtTime(0.001,now+idx*0.22);
+      gain.gain.exponentialRampToValueAtTime(0.055,now+idx*0.22+0.12);
+      gain.gain.exponentialRampToValueAtTime(0.0001,now+idx*0.22+1.1);
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.start(now+idx*0.22);osc.stop(now+idx*0.22+1.15);
+    });
+  }catch(e){}
+}
+
+$('#btn-test-wake').onclick=()=>{
+  if(!smartWakeOn)return;
+  const win=$('#wake-win').value;
+  let foundIdx=88;
+  if(night&&night.ep){
+    for(let i=82;i<95;i++){if(night.ep[i]===2){foundIdx=i;break;}}
+  }
+  const t=(1410+foundIdx*5)%1440;
+  const timeStr=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+  ['act-haptic','act-led','act-audio'].forEach(id=>{
+    const el=$('#'+id);el.classList.remove('firing');void el.offsetWidth;el.classList.add('firing');
+  });
+  playWakeChime();
+  $('#wake-log').innerHTML=`<b>Smart Wake Triggered at ${timeStr}</b> (${win}): Light Sleep (N2) epoch detected — Haptic Wrist Pulse, 480nm Blue-Enriched Dawn LED &amp; Gradual Binaural Audio activated.`;
+};
+
+/* =========================================================
+   PERSISTENT FLOATING AI FLIGHT SURGEON CO-PILOT
+   ========================================================= */
+let edgeManual=false;
+const isOffline=()=>edgeManual||active.has('storm')||active.has('blackout');
+
+function updateAiInsight(){
+  const off=isOffline(),btn=$('#ai-net-btn');
+  if(off){
+    btn.className='ai-net edge';
+    btn.textContent=active.has('storm')?'Edge AI (Solar Storm)':active.has('blackout')?'Edge AI (Blackout)':'Edge AI (Offline Mode)';
+  }else{
+    btn.className='ai-net cloud';
+    btn.textContent='Cloud API (Gemini)';
+  }
+  const hr=Math.round(M.find(m=>m.id==='hr').v);
+  const slp=Math.round(M.find(m=>m.id==='slp').v);
+  const imm=Math.round(M.find(m=>m.id==='imm').v);
+  const rad=Math.round(M.find(m=>m.id==='rad').v);
+  const co2=Math.round(M.find(m=>m.id==='co2').v);
+  const vSt=getVocalStatus(vocalState);
+  const box=$('#ai-live-insight');
+
+  if(active.has('storm')){
+    box.innerHTML=`<b>[Edge AI Autonomous Alert]</b> Solar storm blackout (${rad} µSv/h). Cloud link offline; local model directs immediate shelter in shielded core.`;
+  }else if(active.has('blackout')){
+    box.innerHTML=`<b>[Edge AI Local Fallback]</b> Orbital signal blackout active. Running on-board quantized model with zero latency.`;
+  }else if((slp<75&&hr>85)||(vSt!=='ok'&&imm<80)){
+    box.innerHTML=`<b>[Cross-Correlation Alert]</b> Low deep sleep (${slp}m) + elevated HR (${hr} bpm) + vocal strain (${vSt.toUpperCase()}) indicate autonomic fatigue &amp; immune dip (${imm}%).`;
+  }else if(co2>3500){
+    box.innerHTML=`<b>[Cabin Atmosphere Alert]</b> Elevated CO₂ (${co2} ppm) correlates with reduced SpO₂ and sleep fragmentation. Check scrubbers.`;
+  }else{
+    box.innerHTML=`<b>[Telemetry Synthesis]</b> HR ${hr} bpm, Deep Sleep ${slp}m, Vocal HNR ${vocalState.hnr.toFixed(1)} dB, Immunity ${imm}%. All systems nominal.`;
+  }
+}
+
+$('#ai-net-btn').onclick=e=>{e.stopPropagation();edgeManual=!edgeManual;updateAiInsight()};
+$('#ai-min-btn').onclick=e=>{
+  e.stopPropagation();
+  $('#ai-hud').classList.toggle('collapsed');
+  $('#ai-min-btn').textContent=$('#ai-hud').classList.contains('collapsed')?'+':'–';
+};
+$('#ai-hud-head').onclick=()=>{
+  $('#ai-hud').classList.toggle('collapsed');
+  $('#ai-min-btn').textContent=$('#ai-hud').classList.contains('collapsed')?'+':'–';
+};
+
+function getAiResponse(q){
+  const s=q.toLowerCase();
+  const hr=Math.round(M.find(m=>m.id==='hr').v);
+  const bp=Math.round(M.find(m=>m.id==='bp').v);
+  const slp=Math.round(M.find(m=>m.id==='slp').v);
+  const imm=Math.round(M.find(m=>m.id==='imm').v);
+  const glu=Math.round(M.find(m=>m.id==='glu').v);
+  const vSt=getVocalStatus(vocalState);
+  const tag=isOffline()?'<em>[Edge AI Local]</em> ':'<em>[Gemini Cloud + Telemetry]</em> ';
+
+  if(s.includes('edge')||s.includes('offline')||s.includes('internet')){
+    return tag+'During orbital blackouts or solar storms, I switch automatically from Google Cloud API to a lightweight quantized Edge AI model running locally on the capsule tablet—delivering zero-latency medical decisions without internet.';
+  }
+  if(s.includes('voice')||s.includes('vocal')||s.includes('immun')){
+    return tag+`Vocal fold Jitter is <b>${vocalState.jitter.toFixed(2)}%</b> and HNR is <b>${vocalState.hnr.toFixed(1)} dB</b> (${vSt==='ok'?'optimal':'strained'}), paired with systemic immunity at <b>${imm}%</b>. ${vSt==='ok'?'Vagal tone and laryngeal mucosa are stable.':'Early micro-inflammation detected—run Digital Vagus Nerve breathing and boost antioxidants.'}`;
+  }
+  if(s.includes('sleep')||s.includes('wake')){
+    return tag+`Last night logged <b>${slp} min</b> of Deep N3 sleep. Smart Wake-up is <b>${smartWakeOn?'ACTIVE ('+$('#wake-win').value+')':'PAUSED'}</b>—waiting for Light Sleep (N2) to fire silent wrist haptics and 480nm dawn light.`;
+  }
+  const flags=[];
+  if(hr>85||hr<50)flags.push(`HR ${hr} bpm`);
+  if(bp<95||bp>135)flags.push(`BP ${bp} mmHg`);
+  if(glu<70)flags.push(`low glucose ${glu} mg/dL`);
+  if(slp<85)flags.push(`low deep sleep ${slp}m`);
+  if(vSt!=='ok'||imm<80)flags.push(`immune/vocal strain (${imm}%)`);
+  if(flags.length){
+    return tag+`Cross-correlating active anomalies: <b>${flags.join(', ')}</b>. Prioritize primary vital stabilization, reduce ARED resistance load today, and run a 4-6 vagal breathing drill.`;
+  }
+  return tag+`Full multi-sensor synthesis: Cardiovascular (HR ${hr} bpm, BP ${bp} mmHg), Glucose (${glu} mg/dL), Sleep (${slp}m Deep N3), and Vocal Immunity (${imm}%) are all aligned within microgravity baselines.`;
+}
+
+function addChatMsg(txt,cls){
+  const box=$('#ai-msgs'),d=document.createElement('div');
+  d.className='ai-msg '+cls;d.innerHTML=txt;
+  box.appendChild(d);box.scrollTop=box.scrollHeight;
+}
+$('#ai-form').onsubmit=e=>{
+  e.preventDefault();
+  const inp=$('#ai-input'),v=inp.value.trim();if(!v)return;
+  addChatMsg(v.replace(/</g,'&lt;'),'usr');inp.value='';
+  setTimeout(()=>addChatMsg(getAiResponse(v),'bot'),180);
+};
+document.querySelectorAll('.ai-chips button').forEach(b=>b.onclick=()=>{
+  const q=b.dataset.q;addChatMsg(q,'usr');
+  setTimeout(()=>addChatMsg(getAiResponse(q),'bot'),160);
+});
+
+/* =========================================================
+   LIVE ECG TRACE
+   ========================================================= */
+const cv=$('#ecg'),cx=cv.getContext('2d'),N=320,buf=new Array(N).fill(0);
+let ph=0,last=performance.now(),acc=0;
+const g=(x,c,w,a)=>a*Math.exp(-((x-c)**2)/(2*w*w));
+const ecg=p=>g(p,.18,.025,.12)+g(p,.30,.008,-.15)+g(p,.33,.010,1)+g(p,.36,.010,-.25)+g(p,.58,.04,.25);
+function frame(t){
+  const dt=Math.min(.1,(t-last)/1000);last=t;acc+=dt*100;
+  while(acc>=1){acc--;ph=(ph+.01*M[0].v/60)%1;buf.push(ecg(ph));buf.shift()}
+  cx.clearRect(0,0,cv.width,cv.height);
+  cx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');
+  cx.lineWidth=2;cx.lineJoin='round';cx.beginPath();
+  buf.forEach((y,i)=>{const X=i/(N-1)*cv.width,Y=cv.height*.78-y*cv.height*.62;i?cx.lineTo(X,Y):cx.moveTo(X,Y)});
+  cx.stroke();requestAnimationFrame(frame);
+}
+
+/* =========================================================
+   MULTI-SENSOR SLEEP ARCHITECTURE & INTERACTIVE HYPNOGRAM
+   ========================================================= */
+const SC=['var(--awake)','var(--rem)','var(--light)','var(--deep)'],ST=['Awake','REM','Light','Deep'];
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+function gen(f){
+  const D=[8,6,4,2,1],R=[2,3,5,6,7],ep=[0,0,0];
+  for(let c=0;c<5;c++){
+    const d=Math.max(0,Math.round(D[c]*f+(f===1?Math.round(Math.random()*2-1):0))),r=R[c],l=18-d-r,a=Math.ceil(l/2);
+    ep.push(...Array(a).fill(2),...Array(d).fill(3),...Array(l-a).fill(2),...Array(r).fill(1));
+  }
+  while(ep.length<96)ep.push(0);
+  // Ensure Light Sleep epoch exists inside 07:00-07:30 wake window (idx 84..90)
+  ep[86]=2;ep[87]=2;
+  for(let i=0;i<(f<1?5:2);i++){const p=14+Math.floor(Math.random()*68);if(ep[p]===2)ep[p]=0}
+  const B=[70,62,58,52],V=[30,40,48,62],Rr=[16,15.5,14.5,13],hr=[],hv=[],rr=[],mv=[];
+  ep.forEach((s,i)=>{hr.push(B[s]*(1-i/96*.08)+(Math.random()-.5)*4);hv.push(V[s]+(Math.random()-.5)*8);rr.push(Rr[s]+(Math.random()-.5)*1.4);mv.push(s===0?.5+Math.random()*.5:Math.random()*(s===1?.18:.08))});
+  if(f<1)for(let i=0;i<4;i++)rr[20+Math.floor(Math.random()*60)]=8+Math.random();
+  return{ep,hr,hv,rr,mv};
+}
+function stats(n){
+  const m=[0,0,0,0];n.ep.forEach(s=>m[s]+=5);
+  const idx=n.ep.map((s,i)=>s?i:-1).filter(i=>i>=0),sl=a=>idx.map(i=>a[i]);
+  const asleep=480-m[0],eff=asleep/480;
+  let aw=0;n.ep.forEach((s,i)=>{if(i>3&&i<90&&!s&&n.ep[i-1])aw++});
+  const r=sl(n.rr),mu=avg(r),sd=Math.sqrt(avg(r.map(x=>(x-mu)**2))),ev=r.filter(x=>x<10).length;
+  const bq=Math.max(0,Math.round(100-ev*6-sd*4)),cl=x=>Math.min(1,x);
+  const score=Math.round(30*cl(asleep/450)+30*cl(m[3]/100)+15*cl(m[1]/100)+15*eff+10*Math.max(0,1-aw/6));
+  return{m,asleep,eff:Math.round(eff*100),aw,ev,bq,rr:mu.toFixed(1),hr:Math.round(avg(sl(n.hr))),hv:Math.round(avg(sl(n.hv))),score,lab:score>=80?'Optimal':score>=60?'Fair':'Poor'};
+}
+let night;
+const hh=i=>{const t=(1410+i*5)%1440;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0')};
+
+function renderSleep(s){
+  const n=night,W=6.25,X=62;
+  const rc=n.ep.map((st,i)=>`<rect x="${X+i*W}" y="${st*30+8}" width="${W+.4}" height="22" fill="${SC[st]}"/>`).join('');
+  const lb=ST.map((t,i)=>`<text x="0" y="${i*30+24}" font-size="11" fill="var(--mute)">${t}</text>`).join('');
+  const tk=[0,24,48,72,96].map(i=>`<text x="${X+i*W}" y="140" font-size="11" fill="var(--mute)" text-anchor="${i?i===96?'end':'middle':'start'}">${hh(i)}</text>`).join('');
+  const ln=(a,lo,hi,y)=>`<polyline fill="none" stroke="var(--acc)" stroke-width="1.5" points="${a.map((v,i)=>`${X+i*W+W/2},${(y+38-Math.min(1,Math.max(0,(v-lo)/(hi-lo)))*36).toFixed(1)}`).join(' ')}"/>`;
+  const mb=n.mv.map((v,i)=>`<rect x="${X+i*W}" y="${138-v*36}" width="${W-1}" height="${v*36}" fill="var(--acc)" opacity=".7"/>`).join('');
+  const sg=['Heart rate','Breathing','Movement'].map((t,i)=>`<text x="0" y="${i*50+24}" font-size="11" fill="var(--mute)">${t}</text>`).join('');
+  const seg=[3,2,1,0].map(k=>`<div style="width:${s.m[k]/4.8}%;background:${SC[k]}"></div>`).join('');
+  const lg=[3,2,1,0].map(k=>`<span><i style="background:${SC[k]}"></i>${ST[k]} <b>${s.m[k]} min</b> (${Math.round(s.m[k]/4.8)}%)</span>`).join('');
+
+  $('#sl').innerHTML=`<div class="sl4">
+    <div class="mc"><small>Sleep Score</small><b>${s.score}</b> <span>/100 (${s.lab})</span></div>
+    <div class="mc"><small>Avg Sleep HR (PPG)</small><b>${s.hr}</b> <span>bpm</span></div>
+    <div class="mc"><small>Sleep HRV (PPG)</small><b>${s.hv}</b> <span>ms</span></div>
+    <div class="mc"><small>Breathing Quality</small><b>${s.bq}</b> <span>% (${s.rr} br/m)</span></div>
+  </div>`
+  +`<div class="stk" role="img" aria-label="Sleep stages breakdown">${seg}</div><div class="slg">${lg}</div>`
+  +`<svg class="hyp" id="hyp-svg" viewBox="0 0 700 146" role="img" aria-label="Interactive sleep stages hypnogram">${lb}${rc}${tk}</svg>`
+  +`<svg class="hyp" id="sig-svg" viewBox="0 0 700 150" role="img" aria-label="Multi-sensor heart rate, breathing and movement">${sg}${ln(n.hr,40,80,0)}${ln(n.rr,6,18,50)}${mb}</svg>`
+  +`<p class="note">In bed 23:30 to 07:30 · Asleep <b>${Math.floor(s.asleep/60)}h ${s.asleep%60}m</b> · Efficiency <b>${s.eff}%</b> · ${s.aw} awakening${s.aw===1?'':'s'}.</p>`;
+
+  // Attach hover/touch inspection on hypnogram & signals
+  const tip=$('#hyp-tip');
+  const bindInspect=svg=>{
+    if(!svg)return;
+    const show=e=>{
+      const rect=svg.getBoundingClientRect();
+      const clientX=e.touches?e.touches[0].clientX:e.clientX;
+      const clientY=e.touches?e.touches[0].clientY:e.clientY;
+      const svgX=(clientX-rect.left)/rect.width*700;
+      const idx=Math.min(95,Math.max(0,Math.floor((svgX-X)/W)));
+      const st=ST[n.ep[idx]];
+      tip.style.display='block';
+      tip.style.left=Math.min(window.innerWidth-250,clientX+12)+'px';
+      tip.style.top=Math.max(10,clientY-68)+'px';
+      tip.innerHTML=`<b>${hh(idx)} — ${st} Sleep</b><br>HR: ${Math.round(n.hr[idx])} bpm · HRV: ${Math.round(n.hv[idx])} ms<br>Resp: ${n.rr[idx].toFixed(1)} br/m · Motion: ${Math.round(n.mv[idx]*100)}%`;
+    };
+    svg.addEventListener('mousemove',show);
+    svg.addEventListener('touchstart',show,{passive:true});
+    svg.addEventListener('mouseleave',()=>tip.style.display='none');
+    svg.addEventListener('touchend',()=>tip.style.display='none');
+  };
+  bindInspect($('#hyp-svg'));
+  bindInspect($('#sig-svg'));
+}
+function newNight(f){
+  night=gen(f);const s=stats(night),m=M.find(x=>x.id==='slp');
+  base.slp=s.m[3];tgt.slp=s.m[3];m.v=s.m[3];
+  $('#n1').setAttribute('aria-pressed',f===1);
+  $('#n2').setAttribute('aria-pressed',f<1);
+  renderSleep(s);paint();
+}
+$('#n1').onclick=()=>newNight(1);
+$('#n2').onclick=()=>newNight(.3);
+
+/* =========================================================
+   EXERCISE & MENTAL HEALTH CHECK-IN
+   ========================================================= */
+let mins=0;
+function ex(){
+  const d=new Date(),h=d.getHours()+d.getMinutes()/60;
+  const exp=Math.round(Math.min(1,Math.max(0,(h-6)/14))*120);
+  $('#exh').textContent=+(mins/60).toFixed(2);
+  $('#exbar').firstElementChild.style.width=Math.min(100,mins/120*100)+'%';
+  $('#exbar').setAttribute('aria-valuenow',mins);
+  $('#exexp').textContent=(exp/60).toFixed(1)+' h';
+  const s=$('#exmsg');
+  if(mins>=120){s.textContent='Daily goal reached';s.style.color='var(--ok)'}
+  else if(mins<exp-30){s.textContent='Alert: behind on exercise. Add a session before day end.';s.style.color='var(--warn)'}
+  else{s.textContent='On track';s.style.color='var(--ok)'}
+}
+document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{mins=Math.max(0,Math.min(180,mins+ +b.dataset.add));ex()});
+
+const Q=[['How would you rate your sleep quality?','Very poor','Excellent'],['What is your stress level today?','Calm','Very high'],['How are your mood and energy?','Low','High']];
+$('#qs').innerHTML=Q.map((q,i)=>`<fieldset><legend>${q[0]}</legend><div class="scale"><em>${q[1]}</em>${[1,2,3,4,5].map(n=>`<label><input type="radio" name="q${i}" value="${n}"><span>${n}</span></label>`).join('')}<em>${q[2]}</em></div></fieldset>`).join('');
+let H=[];
+try{H=JSON.parse(localStorage.getItem('chk')||'[]')}catch(e){}
+const store=()=>{try{localStorage.setItem('chk',JSON.stringify(H))}catch(e){}};
+const poor=d=>d.s<=2||d.t>=4||d.m<=2;
+function showHist(){
+  const h=H.slice(-7);
+  $('#hist').innerHTML=h.length?'Recent days: '+h.map(d=>`<i class="${poor(d)?'p':''}" title="${poor(d)?'Hard day':'Good day'}"></i>`).join('')+' <span>Red means a hard day</span>':'';
+  const l=H.slice(-3),hard=l.length===3&&l.every(poor);
+  $('#support').hidden=!hard;
+  hard?startBreath():stopBreath();
+}
+$('#save').onclick=()=>{
+  const v=i=>{const c=document.querySelector(`input[name=q${i}]:checked`);return c?+c.value:0};
+  const d={s:v(0),t:v(1),m:v(2)};
+  if(!d.s||!d.t||!d.m){$('#mres').textContent='Answer all three questions before saving.';return}
+  H.push(d);H=H.slice(-30);store();showHist();
+  $('#mres').textContent=poor(d)?'Hard day logged. Three in a row triggers a support message.':'Check-in saved.';
+};
+$('#demo').onclick=()=>{H=[{s:2,t:4,m:2},{s:2,t:5,m:3},{s:1,t:4,m:2}];store();showHist();$('#mres').textContent='Demo sample loaded.'};
+$('#clr').onclick=()=>{H=[];store();showHist();$('#mres').textContent=''};
+let bt;
+function startBreath(){
+  if(bt)return;const b=$('#breath');let inh=true;
+  const step=()=>{b.classList.toggle('in',inh);b.classList.toggle('out',!inh);b.textContent=inh?'Inhale':'Exhale';bt=setTimeout(step,inh?4000:6000);inh=!inh};step();
+}
+function stopBreath(){clearTimeout(bt);bt=null}
+
+const HM=[
+['Cortisol','Stress response hormone that also regulates energy','Chronic stress, anxiety, poor sleep, suppressed immunity, higher blood pressure','Adrenal fatigue, low energy, low blood pressure','Regulate sleep, relaxation, less caffeine'],
+['Serotonin','Regulates mood, appetite and sleep','Severe anxiety; serotonin syndrome with certain drugs','Depression, mood swings, insomnia','Sunlight-spectrum lighting, exercise, tryptophan-rich foods'],
+['Dopamine','Reward, motivation and movement','Overstimulation and compulsive behavior','Loss of drive, lethargy','Small daily goals, exercise, good sleep'],
+['Melatonin','Sets the sleep-wake cycle','Daytime drowsiness and circadian disruption','Chronic insomnia and broken sleep','Avoid blue light at night, bright 480nm light in the morning']];
+$('#hormones').innerHTML=HM.map(h=>`<details><summary>${h[0]}</summary><dl><dt>Role</dt><dd>${h[1]}</dd><dt>If high</dt><dd>${h[2]}</dd><dt>If low</dt><dd>${h[3]}</dd><dt>Adjustment</dt><dd>${h[4]}</dd></dl></details>`).join('');
+
+/* =========================================================
+   INITIALIZE
+   ========================================================= */
+const clock=()=>{$('#clock').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
+build();renderVocal();paint();ex();showHist();clock();newNight(1);
+setInterval(tick,2000);
+setInterval(()=>{clock();ex()},30000);
+requestAnimationFrame(frame);
+requestAnimationFrame(drawVocalWave);
+</script>
+</body>
+</html>
